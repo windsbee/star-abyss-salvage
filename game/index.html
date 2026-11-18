@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Star Abyss Salvage</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #02040a; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #eaf6ff; }
+  #wrap { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+  #stage { position: relative; width: min(96vw, 153.6vh); aspect-ratio: 8 / 5; }
+  #game { width: 100%; height: 100%; display: block; background: #050914; border: 1px solid rgba(53,240,255,0.25); border-radius: 6px; }
+  .hidden { display: none !important; }
+  /* --- HUD --- */
+  #hud { position: absolute; left: 0; right: 0; top: 0; padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; pointer-events: none; font-size: 13px; }
+  .hud-row { display: flex; gap: 16px; align-items: center; }
+  .bar { position: relative; height: 14px; background: rgba(0,0,0,0.6); border: 1px solid rgba(53,240,255,0.35); border-radius: 3px; overflow: hidden; flex: 1; }
+  .bar > div { height: 100%; transition: width 0.12s linear; }
+  #hp-fill { background: linear-gradient(90deg, #ff5d5d, #ff9f43); width: 100%; }
+  #xp-fill { background: linear-gradient(90deg, #35f0ff, #7dff8a); width: 0%; }
+  .bar span { position: absolute; inset: 0; text-align: center; font-size: 11px; line-height: 14px; color: #fff; text-shadow: 0 1px 2px #000; }
+  .stat { white-space: nowrap; text-shadow: 0 1px 2px #000; }
+  .stat b { color: #ffd166; }
+  #dash-fill { background: #35f0ff; width: 100%; }
+  #dash-fill.ready { background: #7dff8a; }
+  #boss-bar { height: 10px; }
+  #boss-fill { background: #ff4fd8; width: 100%; }
+  #btn-mute { pointer-events: auto; background: rgba(0,0,0,0.55); color: #eaf6ff; border: 1px solid rgba(53,240,255,0.35); border-radius: 4px; padding: 2px 8px; cursor: pointer; font-size: 12px; }
+  /* --- Toast --- */
+  #toast { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); font-size: 30px; font-weight: 800; letter-spacing: 4px; color: #ffd166; text-shadow: 0 0 18px rgba(255,209,102,0.6), 0 2px 4px #000; opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap; }
+  #toast.show { opacity: 1; }
+  /* --- Screens --- */
+  .screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: rgba(2,4,10,0.72); text-align: center; border-radius: 6px; }
+  .screen h1 { margin: 0; font-size: 44px; letter-spacing: 6px; color: #35f0ff; text-shadow: 0 0 24px rgba(53,240,255,0.55); }
+  .screen h2 { margin: 0; font-size: 30px; letter-spacing: 3px; }
+  .screen p { margin: 0; max-width: 560px; line-height: 1.55; color: #cfe9ff; font-size: 15px; }
+  .screen .dim { color: #8fa8c8; font-size: 13px; }
+  .screen .gold { color: #ffd166; }
+  .bigbtn { pointer-events: auto; font-size: 18px; font-weight: 700; letter-spacing: 2px; color: #04121a; background: #35f0ff; border: none; border-radius: 6px; padding: 12px 34px; cursor: pointer; }
+  .bigbtn:hover { background: #7df3ff; }
+  .ghostbtn { pointer-events: auto; font-size: 15px; color: #eaf6ff; background: transparent; border: 1px solid rgba(53,240,255,0.5); border-radius: 6px; padding: 9px 22px; cursor: pointer; }
+  .ghostbtn:hover { border-color: #35f0ff; }
+  .stats { display: flex; gap: 28px; font-size: 15px; }
+  .stats b { color: #ffd166; font-size: 20px; display: block; }
+  #cards { display: flex; gap: 14px; }
+  .card { pointer-events: auto; width: 190px; min-height: 150px; display: flex; flex-direction: column; gap: 8px; align-items: center; justify-content: center; background: rgba(10,20,40,0.92); border: 1px solid rgba(53,240,255,0.45); border-radius: 8px; color: #eaf6ff; cursor: pointer; padding: 16px 12px; font-family: inherit; }
+  .card:hover { border-color: #ffd166; box-shadow: 0 0 18px rgba(255,209,102,0.25); }
+  .card-key { font-size: 12px; color: #8fa8c8; border: 1px solid #8fa8c8; border-radius: 4px; padding: 1px 7px; }
+  .card-name { font-size: 17px; font-weight: 700; color: #35f0ff; }
+  .card-desc { font-size: 13px; color: #cfe9ff; line-height: 1.4; }
+  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="stage">
+    <canvas id="game" width="960" height="600" aria-label="Star Abyss Salvage: pilot a salvage skiff, blast void creatures, collect stardust and level up"></canvas>
+    <div id="hud" class="hidden">
+      <div class="hud-row">
+        <div class="bar"><div id="hp-fill"></div><span id="hp-text">100 / 100</span></div>
+        <div class="bar"><div id="xp-fill"></div><span id="xp-text">LV 1</span></div>
+        <button id="btn-mute">🔊 Sound on (M)</button>
+      </div>
+      <div class="hud-row">
+        <span class="stat" id="hud-wave">WAVE 1</span>
+        <span class="stat">SCORE <b id="hud-score">0</b></span>
+        <span class="stat">✦ <b id="hud-dust">0</b></span>
+        <span class="stat">KILLS <b id="hud-kills">0</b></span>
+        <span class="stat">DASH</span>
+        <div class="bar" style="max-width:120px"><div id="dash-fill"></div></div>
+      </div>
+      <div class="hud-row hidden" id="boss-bar">
+        <div class="bar"><div id="boss-fill"></div><span>ABYSS MONARCH</span></div>
+      </div>
+    </div>
+    <div id="toast" class="hidden"></div>
+
+    <div id="screen-title" class="screen">
+      <h1>STAR ABYSS SALVAGE</h1>
+      <p>A neon arena-survival roguelite. Pilot your salvage skiff through the void, blast mites and drones, gather stardust, draft upgrades — and slay the <span class="gold">Abyss Monarch</span> on wave 10.</p>
+      <p class="dim">WASD / arrows — move &nbsp;·&nbsp; auto-fire &nbsp;·&nbsp; SPACE — dash &nbsp;·&nbsp; P — pause &nbsp;·&nbsp; M — mute &nbsp;·&nbsp; 1/2/3 — pick upgrade</p>
+      <button class="bigbtn" id="btn-start">▶ &nbsp;START SALVAGE</button>
+      <p class="dim" id="title-best"></p>
+    </div>
+
+    <div id="screen-pause" class="screen hidden">
+      <h2>PAUSED</h2>
+      <p>The void waits for no one — except right now.</p>
+      <button class="bigbtn" id="btn-resume">RESUME</button>
+      <button class="ghostbtn" id="btn-restart-pause">Restart run</button>
+    </div>
+
+    <div id="screen-levelup" class="screen hidden">
+      <h2>LEVEL UP — CHOOSE AN UPGRADE</h2>
+      <div id="cards"></div>
+      <p class="dim">Press 1 / 2 / 3 or click a card.</p>
+    </div>
+
+    <div id="screen-over" class="screen hidden">
+      <h2>GAME OVER</h2>
+      <p>Your skiff breaks apart among the stars. The salvage goes on without you.</p>
+      <div class="stats">
+        <span>SCORE<b id="over-score">0</b></span>
+        <span>WAVE<b id="over-wave">0</b></span>
+        <span>KILLS<b id="over-kills">0</b></span>
+        <span>BEST<b id="over-best">0</b></span>
+      </div>
+      <p class="gold hidden" id="over-newbest">★ NEW BEST SCORE ★</p>
+      <button class="bigbtn" id="btn-again">↻ &nbsp;SALVAGE AGAIN</button>
+      <p class="dim">or press Enter</p>
+    </div>
+
+    <div id="screen-win" class="screen hidden">
+      <h2>🏆 THE ABYSS MONARCH FALLS</h2>
+      <p>You survived all ten waves and broke the Monarch's crown. The abyss is yours to salvage.</p>
+      <div class="stats">
+        <span>SCORE<b id="win-score">0</b></span>
+        <span>WAVE<b id="win-wave">0</b></span>
+        <span>KILLS<b id="win-kills">0</b></span>
+        <span>BEST<b id="win-best">0</b></span>
+      </div>
+      <button class="bigbtn" id="btn-endless">∞ &nbsp;CONTINUE: ENDLESS DRIFT</button>
+      <button class="ghostbtn" id="btn-again-win">Play again</button>
+    </div>
+    <p id="status" role="status" aria-live="polite"></p>
+  </div>
+</div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
